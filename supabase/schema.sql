@@ -5,14 +5,14 @@ create table if not exists public.ships (
   name text not null,
   title text not null,
   description text not null,
-  remark text nullable,
+  remark text null,
   code_hash text not null unique,
   start_at timestamptz not null,
   end_at timestamptz not null,
   early_checkin_minutes int not null default 5,
   on_time_until_minutes int not null default 10,
   close_before_end_minutes int not null default 5,
-  created_by uuid nullable,
+  created_by uuid null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -33,7 +33,7 @@ create table if not exists public.checkin_logs (
   lat double precision,
   lng double precision,
   accuracy double precision,
-  client_captured_at timestamptz nullable,
+  client_captured_at timestamptz null,
   server_received_at timestamptz not null default now(),
   created_at timestamptz default now(),
   unique(ship_id, email)
