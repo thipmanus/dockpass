@@ -2,9 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, Check, Clipboard, Copy, Search, Ship, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, CalendarClock, Check, CheckCircle2, Clipboard, Copy, Search, Ship, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DateTimeDisplayInput } from "@/components/ui/date-display-input";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatThaiDateTimeDisplay } from "@/lib/date-format";
+import { formatThaiDateRangeDisplay, formatThaiDateTimeDisplay } from "@/lib/date-format";
 import { parseEmailList } from "@/lib/email";
 
 type CreateResponse = {
@@ -44,6 +46,7 @@ async function readJsonResponse(response: Response) {
 }
 
 export default function NewShipPage() {
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [remark, setRemark] = useState("");
@@ -125,7 +128,6 @@ export default function NewShipPage() {
       }
 
       setResult(data as CreateResponse);
-      setNotice("สร้างรอบเช็กอินสำเร็จ");
       resetForm();
       setConfirmOpen(false);
     } catch {
@@ -259,21 +261,19 @@ export default function NewShipPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="start_at">เวลาเริ่ม</Label>
-                    <Input
+                    <DateTimeDisplayInput
                       id="start_at"
-                      type="datetime-local"
                       value={startAt}
-                      onChange={(event) => setStartAt(event.target.value)}
+                      onChange={setStartAt}
                       required
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="end_at">เวลาสิ้นสุด</Label>
-                    <Input
+                    <DateTimeDisplayInput
                       id="end_at"
-                      type="datetime-local"
                       value={endAt}
-                      onChange={(event) => setEndAt(event.target.value)}
+                      onChange={setEndAt}
                       required
                     />
                   </div>
@@ -354,25 +354,9 @@ export default function NewShipPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {result ? (
-                  <div className="space-y-4">
-                    <div className="rounded-md border bg-white p-4">
-                      <p className="text-sm text-muted-foreground">สร้างรอบเช็กอินแล้ว</p>
-                      <h2 className="safe-break mt-2 font-semibold">{result.ship.title}</h2>
-                      <p className="mt-2 text-sm text-muted-foreground tabular-nums">
-                        ผู้ได้รับมอบหมาย {result.assigned_emails.length} อีเมล
-                      </p>
-                    </div>
-                    <Button className="w-full" onClick={() => copyText(result.portal_link, "คัดลอกพอร์ทัลเช็กอินแล้ว")}>
-                      <Copy className="size-4" />
-                      คัดลอกพอร์ทัลเช็กอิน
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-pretty text-sm leading-7 text-muted-foreground">
-                    ผู้ใช้จะเปิดพอร์ทัลกลางและเข้าสู่ระบบด้วย Google ระบบจะจับคู่จากอีเมลที่ได้รับมอบหมายโดยอัตโนมัติ
-                  </p>
-                )}
+                <p className="text-pretty text-sm leading-7 text-muted-foreground">
+                  ผู้ใช้จะเปิดพอร์ทัลกลางและเข้าสู่ระบบด้วย Google ระบบจะจับคู่จากอีเมลที่ได้รับมอบหมายโดยอัตโนมัติ
+                </p>
               </CardContent>
             </Card>
 
@@ -440,6 +424,48 @@ export default function NewShipPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(result)} onOpenChange={(open) => !open && setResult(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="size-5" />
+              </span>
+              <div>
+                <DialogTitle>สร้างรอบเช็กอินสำเร็จ</DialogTitle>
+                <DialogDescription>ฟอร์มถูกล้างแล้ว คุณสามารถกลับแดชบอร์ดหรือสร้างรอบใหม่ได้ทันที</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          {result ? (
+            <div className="space-y-4">
+              <div className="rounded-md border p-4">
+                <p className="text-sm text-muted-foreground">ชื่อรอบ</p>
+                <h2 className="safe-break mt-1 font-semibold">{result.ship.title}</h2>
+                <p className="mt-3 text-sm text-muted-foreground tabular-nums">
+                  ผู้ได้รับมอบหมาย {result.assigned_emails.length} อีเมล
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground tabular-nums">
+                  เวลา: {formatThaiDateRangeDisplay(result.ship.start_at, result.ship.end_at)}
+                </p>
+              </div>
+              <Button variant="outline" className="w-full" onClick={() => copyText(result.portal_link, "คัดลอกพอร์ทัลเช็กอินแล้ว")}>
+                <Copy className="size-4" />
+                คัดลอกพอร์ทัลเช็กอิน
+              </Button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setResult(null)}>
+                  สร้างรอบใหม่
+                </Button>
+                <Button onClick={() => router.push("/admin/dashboard")}>
+                  กลับไปแดชบอร์ด
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

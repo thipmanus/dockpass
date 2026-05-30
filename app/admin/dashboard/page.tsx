@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DateDisplayInput } from "@/components/ui/date-display-input";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { safeBrowserSignOut } from "@/lib/auth/client-session";
 import { getStatusBadgeVariant, getStatusThaiLabel, type CheckinStatus } from "@/lib/checkin-status";
 import { formatThaiDateTimeDisplay, formatThaiDateRangeDisplay } from "@/lib/date-format";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
@@ -255,7 +257,7 @@ export default function AdminDashboardPage() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await safeBrowserSignOut(supabase);
     window.location.href = "/admin/login";
   }
 
@@ -392,17 +394,17 @@ export default function AdminDashboardPage() {
                 {filterMode === "date" ? (
                   <div className="space-y-2">
                     <Label htmlFor="date">วันที่</Label>
-                    <Input id="date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                    <DateDisplayInput id="date" value={date} onChange={setDate} placeholder="dd/mm/yyyy" />
                   </div>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="from">จากวันที่</Label>
-                      <Input id="from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+                      <DateDisplayInput id="from" value={from} onChange={setFrom} placeholder="dd/mm/yyyy" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="to">ถึงวันที่</Label>
-                      <Input id="to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+                      <DateDisplayInput id="to" value={to} onChange={setTo} placeholder="dd/mm/yyyy" />
                     </div>
                   </div>
                 )}
@@ -435,10 +437,21 @@ export default function AdminDashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="size-5 text-primary" />
-                รายการรอบเช็กอิน
-              </CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="flex min-w-0 items-center gap-2">
+                  <CalendarDays className="size-5 shrink-0 text-primary" />
+                  <span className="truncate">รายการรอบเช็กอิน</span>
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => copyText(`${window.location.origin}/check-in`, "คัดลอกพอร์ทัลเช็กอินแล้ว")}
+                >
+                  <Copy className="size-4" />
+                  คัดลอกพอร์ทัล
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -465,7 +478,7 @@ export default function AdminDashboardPage() {
                           <TableHead className="min-w-56 whitespace-nowrap">เวลา</TableHead>
                           <TableHead className="min-w-24 whitespace-nowrap">เช็กอิน</TableHead>
                           <TableHead className="min-w-52 whitespace-nowrap">สถานะ</TableHead>
-                          <TableHead className="min-w-44 whitespace-nowrap text-right">จัดการ</TableHead>
+                          <TableHead className="min-w-24 whitespace-nowrap text-right">จัดการ</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -486,10 +499,6 @@ export default function AdminDashboardPage() {
                                 <Button variant="outline" size="sm" onClick={() => openDetail(ship.id)}>
                                   <Eye className="size-4" />
                                   ดู
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => copyText(`${window.location.origin}/check-in`, "คัดลอกพอร์ทัลเช็กอินแล้ว")}>
-                                  <Copy className="size-4" />
-                                  คัดลอกพอร์ทัล
                                 </Button>
                               </div>
                             </TableCell>
@@ -514,14 +523,10 @@ export default function AdminDashboardPage() {
                           <Badge variant="orange">สาย {ship.status_counts.LATE}</Badge>
                           <Badge variant="red">นอกรอบ {ship.status_counts.OUT_OF_SHIP}</Badge>
                         </div>
-                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        <div className="mt-4">
                           <Button variant="outline" onClick={() => openDetail(ship.id)}>
                             <Eye className="size-4" />
                             ดูรายละเอียด
-                          </Button>
-                          <Button variant="ghost" onClick={() => copyText(`${window.location.origin}/check-in`, "คัดลอกพอร์ทัลเช็กอินแล้ว")}>
-                            <Copy className="size-4" />
-                            คัดลอกพอร์ทัล
                           </Button>
                         </div>
                       </div>

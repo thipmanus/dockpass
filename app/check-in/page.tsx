@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import { getBrowserUserOrNull, safeBrowserSignOut } from "@/lib/auth/client-session";
 import { getStatusBadgeVariant, type CheckinStatus } from "@/lib/checkin-status";
 import {
   formatThaiDateDisplay,
@@ -177,9 +178,7 @@ export default function CheckInPage() {
     let active = true;
 
     async function loadUser() {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser();
+      const user = await getBrowserUserOrNull(supabase);
 
       if (!active) {
         return;
@@ -222,7 +221,7 @@ export default function CheckInPage() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await safeBrowserSignOut(supabase);
     setUserEmail(null);
     setShips([]);
     setResult(null);
@@ -264,9 +263,6 @@ export default function CheckInPage() {
 
       if (!response.ok) {
         setError(typeof data.error === "string" ? data.error : "เช็กอินไม่สำเร็จ");
-        if (data.status) {
-          setResult(data as CheckinResult);
-        }
         return;
       }
 
@@ -357,30 +353,6 @@ export default function CheckInPage() {
         </div>
 
         {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-
-        {result ? (
-          <Card className="border-emerald-200 bg-emerald-50">
-            <CardContent className="flex items-start gap-3 pt-5 sm:pt-6">
-              <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-emerald-600" />
-              <div className="min-w-0">
-                <h2 className="text-lg font-bold text-emerald-900">เช็กอินสำเร็จ</h2>
-                <p className="safe-break mt-1 text-sm text-emerald-800">{result.ship?.title}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Badge variant={getStatusBadgeVariant(result.status)}>{result.status_label}</Badge>
-                  <span className="text-sm text-emerald-800">{formatThaiDateTimeDisplay(result.timestamp)}</span>
-                </div>
-                {result.google_maps_link ? (
-                  <Button asChild className="mt-4 w-full sm:w-auto" variant="outline">
-                    <a href={result.google_maps_link} target="_blank" rel="noreferrer">
-                      เปิดใน Google Maps
-                      <ExternalLink className="size-4" />
-                    </a>
-                  </Button>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
 
         {activeTab === "calendar" ? (
           <Card>
@@ -608,6 +580,47 @@ export default function CheckInPage() {
                 <Button onClick={submitCheckIn} disabled={checkingIn}>
                   {checkingIn ? "กำลังเช็กอิน..." : "ยืนยันการเช็กอิน"}
                 </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(result)} onOpenChange={(open) => !open && setResult(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="size-5" />
+              </span>
+              <div>
+                <DialogTitle>เช็กอินสำเร็จ</DialogTitle>
+                <DialogDescription>ระบบบันทึกเวลาเช็กอินและตำแหน่งปัจจุบันของคุณแล้ว</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          {result ? (
+            <div className="space-y-4">
+              <div className="rounded-md border p-4">
+                <p className="text-sm text-muted-foreground">รอบเช็กอิน</p>
+                <h2 className="safe-break mt-1 font-semibold">{result.ship?.title ?? "-"}</h2>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Badge variant={getStatusBadgeVariant(result.status)}>{result.status_label}</Badge>
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {formatThaiDateTimeDisplay(result.timestamp)}
+                  </span>
+                </div>
+              </div>
+              {result.google_maps_link ? (
+                <Button asChild className="w-full sm:w-auto" variant="outline">
+                  <a href={result.google_maps_link} target="_blank" rel="noreferrer">
+                    เปิดใน Google Maps
+                    <ExternalLink className="size-4" />
+                  </a>
+                </Button>
+              ) : null}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button onClick={() => setResult(null)}>ปิด</Button>
               </div>
             </div>
           ) : null}

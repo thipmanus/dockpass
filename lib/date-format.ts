@@ -1,4 +1,23 @@
 const BANGKOK_TIME_ZONE = "Asia/Bangkok";
+const DATE_DISPLAY_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+const DATE_TIME_DISPLAY_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})$/;
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function isValidDateParts(day: number, month: number, year: number) {
+  if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) {
+    return false;
+  }
+
+  if (year < 1000 || month < 1 || month > 12 || day < 1) {
+    return false;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
 
 function getBangkokDateParts(value: string | Date | null | undefined) {
   if (!value) {
@@ -64,4 +83,68 @@ export function formatThaiDateRangeDisplay(
   end: string | Date | null | undefined
 ) {
   return `${formatThaiDateTimeDisplay(start)} - ${formatThaiDateTimeDisplay(end)}`;
+}
+
+export function formatDateDDMMYYYY(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) {
+    return "";
+  }
+
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year}`;
+}
+
+export function formatDateTimeDDMMYYYYHHmm(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!match) {
+    return "";
+  }
+
+  const [, year, month, day, hour, minute] = match;
+  return `${day}/${month}/${year} ${hour}:${minute}`;
+}
+
+export function parseDDMMYYYYToISODate(value: string) {
+  const match = DATE_DISPLAY_PATTERN.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+
+  if (!isValidDateParts(day, month, year)) {
+    return null;
+  }
+
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+export function parseDDMMYYYYHHmmToLocalDateTime(value: string) {
+  const match = DATE_TIME_DISPLAY_PATTERN.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+
+  if (!isValidDateParts(day, month, year) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  return `${year}-${pad2(month)}-${pad2(day)}T${pad2(hour)}:${pad2(minute)}`;
 }
