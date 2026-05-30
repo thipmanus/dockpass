@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getStatusBadgeVariant, getStatusThaiLabel, type CheckinStatus } from "@/lib/checkin-status";
+import { formatThaiDateTimeDisplay, formatThaiDateRangeDisplay } from "@/lib/date-format";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 
 type ShipSummary = {
@@ -124,18 +125,6 @@ const summaryCards = [
   ["ยังไม่เช็กอิน", "not_checked_in"],
   ["นอกรอบ", "out_of_ship"]
 ] as const;
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Bangkok"
-  }).format(new Date(value));
-}
 
 function formatExpiredDuration(endAt: string, serverTime: string) {
   const expiredMs = Math.max(new Date(serverTime).getTime() - new Date(endAt).getTime(), 0);
@@ -386,14 +375,14 @@ export default function AdminDashboardPage() {
               <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-end">
                 <div className="flex rounded-md border bg-muted p-1">
                   <button
-                    className={`min-h-10 flex-1 rounded px-3 text-sm font-semibold ${filterMode === "date" ? "bg-white shadow-sm" : "text-muted-foreground"}`}
+                    className={`min-h-10 min-w-32 flex-1 whitespace-nowrap rounded px-3 text-sm font-semibold ${filterMode === "date" ? "bg-white shadow-sm" : "text-muted-foreground"}`}
                     onClick={() => setFilterMode("date")}
                     type="button"
                   >
-                    วันที่เดียว
+                    เลือกเฉพาะวัน
                   </button>
                   <button
-                    className={`min-h-10 flex-1 rounded px-3 text-sm font-semibold ${filterMode === "range" ? "bg-white shadow-sm" : "text-muted-foreground"}`}
+                    className={`min-h-10 min-w-28 flex-1 whitespace-nowrap rounded px-3 text-sm font-semibold ${filterMode === "range" ? "bg-white shadow-sm" : "text-muted-foreground"}`}
                     onClick={() => setFilterMode("range")}
                     type="button"
                   >
@@ -435,7 +424,7 @@ export default function AdminDashboardPage() {
             {summaryCards.map(([label, key]) => (
               <Card key={key}>
                 <CardContent className="pt-5 sm:pt-6">
-                  <p className="text-sm text-muted-foreground">{label}</p>
+                  <p className="flex min-h-10 items-start text-sm leading-5 text-muted-foreground">{label}</p>
                   <p className="mt-2 text-3xl font-bold tabular-nums">
                     {loading ? "..." : dashboard.summary[key]}
                   </p>
@@ -468,23 +457,23 @@ export default function AdminDashboardPage() {
                 </div>
               ) : (
                 <>
-                  <div className="hidden md:block">
+                  <div className="hidden overflow-x-auto md:block">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>ชื่อรอบ</TableHead>
-                          <TableHead>เวลา</TableHead>
-                          <TableHead>เช็กอิน</TableHead>
-                          <TableHead>สถานะ</TableHead>
-                          <TableHead className="text-right">จัดการ</TableHead>
+                          <TableHead className="min-w-48 whitespace-nowrap">ชื่อรอบ</TableHead>
+                          <TableHead className="min-w-56 whitespace-nowrap">เวลา</TableHead>
+                          <TableHead className="min-w-24 whitespace-nowrap">เช็กอิน</TableHead>
+                          <TableHead className="min-w-52 whitespace-nowrap">สถานะ</TableHead>
+                          <TableHead className="min-w-44 whitespace-nowrap text-right">จัดการ</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {dashboard.ships.map((ship) => (
                           <TableRow key={ship.id}>
                             <TableCell className="safe-break font-semibold">{ship.title}</TableCell>
-                            <TableCell className="text-muted-foreground">{formatDateTime(ship.start_at)} - {formatDateTime(ship.end_at)}</TableCell>
-                            <TableCell className="tabular-nums">{ship.checked_in_count}/{ship.assigned_count}</TableCell>
+                            <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">{formatThaiDateRangeDisplay(ship.start_at, ship.end_at)}</TableCell>
+                            <TableCell className="whitespace-nowrap tabular-nums">{ship.checked_in_count}/{ship.assigned_count}</TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-1.5">
                                 <Badge variant="green">ตรงเวลา {ship.status_counts.ON_TIME}</Badge>
@@ -516,7 +505,7 @@ export default function AdminDashboardPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <h3 className="safe-break font-semibold">{ship.title}</h3>
-                            <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(ship.start_at)}</p>
+                            <p className="mt-1 text-sm text-muted-foreground tabular-nums">{formatThaiDateTimeDisplay(ship.start_at)}</p>
                           </div>
                           <Badge variant="gray" className="shrink-0">{ship.checked_in_count}/{ship.assigned_count}</Badge>
                         </div>
@@ -582,8 +571,8 @@ export default function AdminDashboardPage() {
                         <h3 className="safe-break font-semibold">{ship.title}</h3>
                         <p className="line-clamp-2 mt-2 text-sm text-muted-foreground">{ship.description}</p>
                         <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
-                          <span>เริ่ม: {formatDateTime(ship.start_at)}</span>
-                          <span>สิ้นสุด: {formatDateTime(ship.end_at)}</span>
+                          <span>เริ่ม: {formatThaiDateTimeDisplay(ship.start_at)}</span>
+                          <span>สิ้นสุด: {formatThaiDateTimeDisplay(ship.end_at)}</span>
                           <span className="tabular-nums">หมดอายุแล้ว: {formatExpiredDuration(ship.end_at, trash.server_time)}</span>
                         </div>
                         <div className="mt-4 flex flex-wrap gap-2">
@@ -651,24 +640,24 @@ export default function AdminDashboardPage() {
               <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-2">
                 <div>
                   <p className="text-sm text-muted-foreground">เวลาเริ่ม</p>
-                  <p className="font-semibold">{formatDateTime(detail.ship.start_at)}</p>
+                  <p className="font-semibold tabular-nums">{formatThaiDateTimeDisplay(detail.ship.start_at)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">เวลาสิ้นสุด</p>
-                  <p className="font-semibold">{formatDateTime(detail.ship.end_at)}</p>
+                  <p className="font-semibold tabular-nums">{formatThaiDateTimeDisplay(detail.ship.end_at)}</p>
                 </div>
               </div>
               <div className="grid gap-3">
                 {detail.assignees.map((assignee) => (
                   <div key={assignee.email} className="rounded-md border p-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="safe-break font-semibold">{assignee.email}</p>
+                      <p className="min-w-0 break-all font-semibold">{assignee.email}</p>
                       <Badge variant={getStatusBadgeVariant(assignee.status)}>
                         {getStatusThaiLabel(assignee.status)}
                       </Badge>
                     </div>
                     <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
-                      <span>เวลา: {formatDateTime(assignee.server_received_at)}</span>
+                      <span>เวลา: {formatThaiDateTimeDisplay(assignee.server_received_at)}</span>
                       <span>ความแม่นยำ: {assignee.accuracy ? `${Math.round(assignee.accuracy)} ม.` : "-"}</span>
                       {assignee.google_maps_link ? (
                         <a className="inline-flex items-center gap-1 font-semibold text-primary" href={assignee.google_maps_link} target="_blank" rel="noreferrer">

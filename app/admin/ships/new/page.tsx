@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, Check, Clipboard, Copy, Ship } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, Clipboard, Copy, Search, Ship, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatThaiDateTimeDisplay } from "@/lib/date-format";
 import { parseEmailList } from "@/lib/email";
 
 type CreateResponse = {
@@ -30,24 +31,16 @@ type CreateResponse = {
   assigned_emails: string[];
 };
 
+type EmailListResponse = {
+  emails: string[];
+};
+
 async function readJsonResponse(response: Response) {
   try {
     return (await response.json()) as Record<string, unknown>;
   } catch {
     return {};
   }
-}
-
-function formatDateTime(value: string) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Bangkok"
-  }).format(new Date(value));
 }
 
 export default function NewShipPage() {
@@ -65,8 +58,34 @@ export default function NewShipPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CreateResponse | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [emailPickerOpen, setEmailPickerOpen] = useState(false);
+  const [emailOptions, setEmailOptions] = useState<string[]>([]);
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
+  const [emailSearch, setEmailSearch] = useState("");
+  const [emailPickerLoading, setEmailPickerLoading] = useState(false);
+  const [emailPickerError, setEmailPickerError] = useState<string | null>(null);
 
   const normalizedEmails = useMemo(() => parseEmailList(assignedEmails), [assignedEmails]);
+  const filteredEmailOptions = useMemo(() => {
+    const search = emailSearch.trim().toLowerCase();
+    if (!search) {
+      return emailOptions;
+    }
+
+    return emailOptions.filter((email) => email.includes(search));
+  }, [emailOptions, emailSearch]);
+
+  function resetForm() {
+    setTitle("");
+    setDescription("");
+    setRemark("");
+    setStartAt("");
+    setEndAt("");
+    setAssignedEmails("");
+    setEarlyCheckinMinutes(5);
+    setOnTimeUntilMinutes(10);
+    setCloseBeforeEndMinutes(5);
+  }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,6 +125,8 @@ export default function NewShipPage() {
       }
 
       setResult(data as CreateResponse);
+      setNotice("สร้างรอบเช็กอินสำเร็จ");
+      resetForm();
       setConfirmOpen(false);
     } catch {
       setError("สร้างรอบเช็กอินไม่สำเร็จ กรุณาลองอีกครั้ง");
@@ -118,6 +139,48 @@ export default function NewShipPage() {
     await navigator.clipboard.writeText(text);
     setNotice(message);
     window.setTimeout(() => setNotice(null), 2500);
+  }
+
+  async function openEmailPicker() {
+    setEmailPickerOpen(true);
+    setSelectedEmails([]);
+    setEmailPickerError(null);
+
+    if (emailOptions.length > 0) {
+      return;
+    }
+
+    setEmailPickerLoading(true);
+    try {
+      const response = await fetch("/api/admin/users/emails");
+      const data = await readJsonResponse(response);
+
+      if (!response.ok) {
+        setEmailPickerError(typeof data.error === "string" ? data.error : "โหลดรายชื่ออีเมลไม่สำเร็จ");
+        return;
+      }
+
+      const emails = Array.isArray((data as EmailListResponse).emails) ? (data as EmailListResponse).emails : [];
+      setEmailOptions(emails.filter((email) => typeof email === "string"));
+    } catch {
+      setEmailPickerError("โหลดรายชื่ออีเมลไม่สำเร็จ กรุณาลองอีกครั้ง");
+    } finally {
+      setEmailPickerLoading(false);
+    }
+  }
+
+  function toggleSelectedEmail(email: string) {
+    setSelectedEmails((current) =>
+      current.includes(email) ? current.filter((item) => item !== email) : [...current, email]
+    );
+  }
+
+  function confirmSelectedEmails() {
+    const mergedEmails = parseEmailList(`${assignedEmails}\n${selectedEmails.join(",")}`);
+    setAssignedEmails(mergedEmails.join(", "));
+    setEmailPickerOpen(false);
+    setSelectedEmails([]);
+    setEmailSearch("");
   }
 
   return (
@@ -217,7 +280,13 @@ export default function NewShipPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="assigned_emails">อีเมลผู้ได้รับมอบหมาย</Label>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <Label htmlFor="assigned_emails">อีเมลผู้ได้รับมอบหมาย</Label>
+                    <Button type="button" variant="outline" size="sm" onClick={openEmailPicker} className="w-full sm:w-auto">
+                      <Users className="size-4" />
+                      เลือกอีเมลที่มีอยู่ในระบบ
+                    </Button>
+                  </div>
                   <Textarea
                     id="assigned_emails"
                     value={assignedEmails}
@@ -317,11 +386,11 @@ export default function NewShipPage() {
               <CardContent className="space-y-3 text-sm">
                 <div>
                   <p className="text-muted-foreground">เวลาเริ่ม</p>
-                  <p className="font-semibold">{formatDateTime(startAt)}</p>
+                  <p className="font-semibold">{formatThaiDateTimeDisplay(startAt)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">เวลาสิ้นสุด</p>
-                  <p className="font-semibold">{formatDateTime(endAt)}</p>
+                  <p className="font-semibold">{formatThaiDateTimeDisplay(endAt)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">ผู้ได้รับมอบหมาย</p>
@@ -350,17 +419,18 @@ export default function NewShipPage() {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-md bg-muted p-3">
                 <p className="text-sm text-muted-foreground">เวลาเริ่ม</p>
-                <p className="text-sm font-semibold">{formatDateTime(startAt)}</p>
+                <p className="text-sm font-semibold">{formatThaiDateTimeDisplay(startAt)}</p>
               </div>
               <div className="rounded-md bg-muted p-3">
                 <p className="text-sm text-muted-foreground">เวลาสิ้นสุด</p>
-                <p className="text-sm font-semibold">{formatDateTime(endAt)}</p>
+                <p className="text-sm font-semibold">{formatThaiDateTimeDisplay(endAt)}</p>
               </div>
               <div className="rounded-md bg-muted p-3">
                 <p className="text-sm text-muted-foreground">อีเมล</p>
                 <p className="text-sm font-semibold tabular-nums">{normalizedEmails.length} รายการ</p>
               </div>
             </div>
+            {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={loading}>
                 ยกเลิก
@@ -368,6 +438,68 @@ export default function NewShipPage() {
               <Button onClick={confirmCreate} disabled={loading}>
                 {loading ? "กำลังสร้าง..." : "ยืนยันการสร้าง"}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={emailPickerOpen} onOpenChange={setEmailPickerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>เลือกอีเมลที่มีอยู่ในระบบ</DialogTitle>
+            <DialogDescription>
+              เลือกหลายอีเมลเพื่อเพิ่มเข้าไปในรายชื่อผู้ได้รับมอบหมาย ระบบจะรวมกับรายการที่พิมพ์ไว้และลบรายการซ้ำให้อัตโนมัติ
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={emailSearch}
+                onChange={(event) => setEmailSearch(event.target.value)}
+                placeholder="ค้นหาอีเมล"
+                className="pl-9"
+              />
+            </div>
+
+            {emailPickerError ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{emailPickerError}</p> : null}
+
+            <div className="max-h-80 overflow-y-auto rounded-md border">
+              {emailPickerLoading ? (
+                <div className="space-y-2 p-3">
+                  {[0, 1, 2].map((item) => (
+                    <div key={item} className="h-11 rounded-md bg-muted" />
+                  ))}
+                </div>
+              ) : filteredEmailOptions.length === 0 ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">ไม่พบอีเมลในระบบ</p>
+              ) : (
+                <div className="divide-y">
+                  {filteredEmailOptions.map((email) => (
+                    <label key={email} className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-muted/60">
+                      <input
+                        type="checkbox"
+                        className="size-4 shrink-0 accent-primary"
+                        checked={selectedEmails.includes(email)}
+                        onChange={() => toggleSelectedEmail(email)}
+                      />
+                      <span className="min-w-0 break-all text-sm">{email}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground tabular-nums">เลือกแล้ว {selectedEmails.length} อีเมล</p>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setEmailPickerOpen(false)}>
+                  ยกเลิก
+                </Button>
+                <Button onClick={confirmSelectedEmails} disabled={selectedEmails.length === 0}>
+                  เพิ่มอีเมลที่เลือก
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>

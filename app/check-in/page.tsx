@@ -22,6 +22,11 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { getStatusBadgeVariant, type CheckinStatus } from "@/lib/checkin-status";
+import {
+  formatThaiDateDisplay,
+  formatThaiDateTimeDisplay,
+  formatThaiTimeDisplay
+} from "@/lib/date-format";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 
 type PortalShip = {
@@ -64,37 +69,6 @@ const tabs: { key: TabKey; label: string; icon: typeof CalendarDays }[] = [
   { key: "checkin", label: "เช็กอิน", icon: LocateFixed },
   { key: "history", label: "ประวัติ", icon: History }
 ];
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeZone: "Asia/Bangkok"
-  }).format(new Date(value));
-}
-
-function formatTime(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("th-TH", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Bangkok"
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Bangkok"
-  }).format(new Date(value));
-}
 
 function getCurrentPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
@@ -393,7 +367,7 @@ export default function CheckInPage() {
                 <p className="safe-break mt-1 text-sm text-emerald-800">{result.ship?.title}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Badge variant={getStatusBadgeVariant(result.status)}>{result.status_label}</Badge>
-                  <span className="text-sm text-emerald-800">{formatDateTime(result.timestamp)}</span>
+                  <span className="text-sm text-emerald-800">{formatThaiDateTimeDisplay(result.timestamp)}</span>
                 </div>
                 {result.google_maps_link ? (
                   <Button asChild className="mt-4 w-full sm:w-auto" variant="outline">
@@ -435,7 +409,7 @@ export default function CheckInPage() {
                       onClick={() => setDetailShip(ship)}
                     >
                       <div className="text-sm font-semibold tabular-nums text-primary">
-                        {formatTime(ship.start_at)} - {formatTime(ship.end_at)}
+                        {formatThaiTimeDisplay(ship.start_at)} - {formatThaiTimeDisplay(ship.end_at)}
                       </div>
                       <div className="min-w-0 py-3 md:py-0">
                         <h3 className="safe-break font-semibold">{ship.title}</h3>
@@ -489,7 +463,7 @@ export default function CheckInPage() {
                             <div className="min-w-0">
                               <h3 className="safe-break font-semibold">{ship.title}</h3>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {formatDate(ship.start_at)} เวลา {formatTime(ship.start_at)} - {formatTime(ship.end_at)}
+                                {formatThaiDateDisplay(ship.start_at)} เวลา {formatThaiTimeDisplay(ship.start_at)} - {formatThaiTimeDisplay(ship.end_at)}
                               </p>
                             </div>
                             <Badge variant={ship.can_check_in ? "green" : "blue"}>
@@ -548,7 +522,7 @@ export default function CheckInPage() {
                     >
                       <h3 className="safe-break font-semibold">{ship.title}</h3>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {formatDate(ship.start_at)} เวลา {formatTime(ship.start_at)} - {formatTime(ship.end_at)}
+                        {formatThaiDateDisplay(ship.start_at)} เวลา {formatThaiTimeDisplay(ship.start_at)} - {formatThaiTimeDisplay(ship.end_at)}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Badge variant={getStatusBadgeVariant(ship.status)}>
@@ -588,8 +562,8 @@ export default function CheckInPage() {
                 ) : null}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <InfoBlock label="วันที่" value={formatDate(detailShip.start_at)} />
-                <InfoBlock label="เวลา" value={`${formatTime(detailShip.start_at)} - ${formatTime(detailShip.end_at)}`} />
+                <InfoBlock label="วันที่" value={formatThaiDateDisplay(detailShip.start_at)} />
+                <InfoBlock label="เวลา" value={`${formatThaiTimeDisplay(detailShip.start_at)} - ${formatThaiTimeDisplay(detailShip.end_at)}`} />
                 <InfoBlock label="สถานะ" value={detailShip.status === "NOT_CHECKED_IN" ? "ยังไม่เช็กอิน" : detailShip.status_label} />
                 <InfoBlock label="เช็กอินได้" value={detailShip.can_check_in ? "พร้อมเช็กอิน" : detailShip.disabled_reason ?? "ยังไม่พร้อม"} />
               </div>
@@ -619,7 +593,7 @@ export default function CheckInPage() {
               <div className="rounded-md border p-4">
                 <h2 className="safe-break font-semibold">{confirmShip.title}</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {formatDate(confirmShip.start_at)} เวลา {formatTime(confirmShip.start_at)} - {formatTime(confirmShip.end_at)}
+                  {formatThaiDateDisplay(confirmShip.start_at)} เวลา {formatThaiTimeDisplay(confirmShip.start_at)} - {formatThaiTimeDisplay(confirmShip.end_at)}
                 </p>
                 {confirmShip.expected_checkin_status === "OUT_OF_SHIP" ? (
                   <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">
