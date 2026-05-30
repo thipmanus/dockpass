@@ -7,12 +7,14 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  FileDown,
   LayoutDashboard,
   LogOut,
   Plus,
   Ship,
   Trash2
 } from "lucide-react";
+import { ExportCheckinsTab } from "@/components/admin/export-checkins-tab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -150,7 +152,7 @@ async function readJsonResponse(response: Response) {
 
 export default function AdminDashboardPage() {
   const supabase = useMemo(() => createClientSupabaseClient(), []);
-  const [activeTab, setActiveTab] = useState<"list" | "trash">("list");
+  const [activeTab, setActiveTab] = useState<"list" | "trash" | "export">("list");
   const [filterMode, setFilterMode] = useState<"date" | "range">("date");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [from, setFrom] = useState("");
@@ -337,6 +339,14 @@ export default function AdminDashboardPage() {
               <Plus className="size-4" />
               สร้างรอบ
             </Link>
+            <button
+              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-semibold ${activeTab === "export" ? "bg-secondary text-primary" : "text-slate-600 hover:bg-muted"}`}
+              onClick={() => setActiveTab("export")}
+              type="button"
+            >
+              <FileDown className="size-4" />
+              ส่งออกข้อมูล
+            </button>
           </nav>
         </aside>
 
@@ -351,7 +361,7 @@ export default function AdminDashboardPage() {
             {notice ? <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p> : null}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 rounded-lg border bg-white p-1 lg:hidden">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border bg-white p-1 sm:grid-cols-4 lg:hidden">
             <button
               className={`min-h-11 rounded-md px-3 text-sm font-semibold ${activeTab === "list" ? "bg-secondary text-primary" : "text-muted-foreground"}`}
               onClick={() => setActiveTab("list")}
@@ -365,6 +375,19 @@ export default function AdminDashboardPage() {
               type="button"
             >
               ถังขยะ
+            </button>
+            <Link
+              className="flex min-h-11 items-center justify-center rounded-md px-3 text-center text-sm font-semibold text-muted-foreground"
+              href="/admin/ships/new"
+            >
+              สร้างรอบ
+            </Link>
+            <button
+              className={`min-h-11 rounded-md px-3 text-sm font-semibold ${activeTab === "export" ? "bg-secondary text-primary" : "text-muted-foreground"}`}
+              onClick={() => setActiveTab("export")}
+              type="button"
+            >
+              ส่งออกข้อมูล
             </button>
           </div>
 
@@ -537,7 +560,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
             </>
-          ) : (
+          ) : activeTab === "trash" ? (
             <Card>
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -590,6 +613,8 @@ export default function AdminDashboardPage() {
                 )}
               </CardContent>
             </Card>
+          ) : (
+            <ExportCheckinsTab />
           )}
         </section>
       </div>
