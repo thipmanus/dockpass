@@ -32,14 +32,22 @@ type CreateResponse = {
   portal_link: string;
   calendar_link: string | null;
   invite_preview: string;
-  notification_summary?: {
-    status: "sent" | "skipped" | "failed";
-    enabled: boolean;
-    attempted: number;
-    sent: number;
-    failed: number;
-  };
+  notification_summary?: NotificationSummary;
   assigned_emails: string[];
+};
+
+type NotificationSummary = {
+  enabled: boolean;
+  skipped: boolean;
+  reason?: "feature_disabled" | "missing_api_key" | "missing_from_email" | "no_assignees";
+  total: number;
+  sent: number;
+  failed: number;
+  sentEmails: string[];
+  failedEmails: {
+    email: string;
+    message: string;
+  }[];
 };
 
 type EmailListResponse = {
@@ -52,6 +60,61 @@ async function readJsonResponse(response: Response) {
   } catch {
     return {};
   }
+}
+
+function getNotificationStatusText(summary?: NotificationSummary) {
+  if (!summary) {
+    return null;
+  }
+
+  if (summary.skipped) {
+    if (summary.reason === "feature_disabled") {
+      return {
+        title: "อีเมลแจ้งเตือน: ยังไม่ได้เปิดใช้งาน",
+        description: "สามารถคัดลอกข้อความแจ้งเตือนแล้วส่งให้ผู้ได้รับมอบหมายด้วยตนเองได้",
+        tone: "muted" as const
+      };
+    }
+
+    return {
+      title: "อีเมลแจ้งเตือน: ยังไม่ได้ตั้งค่า Resend",
+      description: "ระบบสร้างรอบเช็กอินสำเร็จแล้ว แต่ยังไม่สามารถส่งอีเมลอัตโนมัติได้",
+      tone: "warning" as const
+    };
+  }
+
+  if (summary.sent === summary.total) {
+    return {
+      title: `อีเมลแจ้งเตือน: ส่งสำเร็จ ${summary.sent}/${summary.total} รายการ`,
+      description: null,
+      tone: "success" as const
+    };
+  }
+
+  if (summary.sent > 0) {
+    return {
+      title: `อีเมลแจ้งเตือน: ส่งสำเร็จ ${summary.sent}/${summary.total} รายการ`,
+      description: `มี ${summary.failed} รายการที่ส่งไม่สำเร็จ`,
+      tone: "warning" as const
+    };
+  }
+
+  return {
+    title: `อีเมลแจ้งเตือน: ส่งไม่สำเร็จ ${summary.failed}/${summary.total} รายการ`,
+    description: "ระบบสร้างรอบเช็กอินสำเร็จแล้ว แต่ส่งอีเมลแจ้งเตือนไม่สำเร็จ กรุณาคัดลอกข้อความแจ้งเตือนแล้วส่งด้วยตนเอง",
+    tone: "danger" as const
+  };
+}
+
+function getNotificationBoxClass(tone: "muted" | "success" | "warning" | "danger") {
+  const classes = {
+    muted: "border-slate-200 bg-slate-50 text-slate-700",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warning: "border-amber-200 bg-amber-50 text-amber-800",
+    danger: "border-red-200 bg-red-50 text-red-800"
+  };
+
+  return classes[tone];
 }
 
 export default function NewShipPage() {
@@ -70,6 +133,7 @@ export default function NewShipPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CreateResponse | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [emailDetailsOpen, setEmailDetailsOpen] = useState(false);
   const [emailPickerOpen, setEmailPickerOpen] = useState(false);
   const [emailOptions, setEmailOptions] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
@@ -86,6 +150,9 @@ export default function NewShipPage() {
 
     return emailOptions.filter((email) => email.includes(search));
   }, [emailOptions, emailSearch]);
+  const notificationStatus = getNotificationStatusText(result?.notification_summary);
+  const shouldShowEmailDetails = Boolean(result?.notification_summary && !result.notification_summary.skipped && result.notification_summary.total > 0);
+  const hasNotificationFailures = Boolean(result?.notification_summary && result.notification_summary.failed > 0);
 
   function resetForm() {
     setTitle("");
@@ -103,6 +170,7 @@ export default function NewShipPage() {
     event.preventDefault();
     setError(null);
     setResult(null);
+    setEmailDetailsOpen(false);
     setConfirmOpen(true);
   }
 
@@ -137,6 +205,7 @@ export default function NewShipPage() {
       }
 
       setResult(data as CreateResponse);
+      setEmailDetailsOpen(false);
       resetForm();
       setConfirmOpen(false);
     } catch {
@@ -460,11 +529,56 @@ export default function NewShipPage() {
                 <p className="mt-2 text-sm text-muted-foreground tabular-nums">
                   เวลา: {formatThaiDateRangeDisplay(result.ship.start_at, result.ship.end_at)}
                 </p>
-                {result.notification_summary ? (
-                  <p className="mt-2 text-sm text-muted-foreground tabular-nums">
-                    อีเมลแจ้งเตือน: ส่งแล้ว {result.notification_summary.sent}/{result.assigned_emails.length}
-                    {result.notification_summary.status === "skipped" ? " (ยังไม่ได้เปิดการส่งอีเมล)" : ""}
-                  </p>
+                {notificationStatus ? (
+                  <div className={`mt-4 rounded-md border p-3 text-sm leading-6 ${getNotificationBoxClass(notificationStatus.tone)}`}>
+                    <p className="font-semibold tabular-nums">{notificationStatus.title}</p>
+                    {notificationStatus.description ? <p className="mt-1">{notificationStatus.description}</p> : null}
+                    {shouldShowEmailDetails && result.notification_summary ? (
+                      <div className="mt-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEmailDetailsOpen((open) => !open)}
+                        >
+                          {emailDetailsOpen ? "ซ่อนรายละเอียดการส่งอีเมล" : "ดูรายละเอียดการส่งอีเมล"}
+                        </Button>
+                        {emailDetailsOpen ? (
+                          <div className="mt-3 grid gap-3 rounded-md bg-white/70 p-3">
+                            <div>
+                              <p className="font-semibold">สำเร็จ</p>
+                              {result.notification_summary.sentEmails.length > 0 ? (
+                                <ul className="mt-1 space-y-1">
+                                  {result.notification_summary.sentEmails.map((email) => (
+                                    <li key={email} className="break-all text-sm">
+                                      {email}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="mt-1 text-sm">ไม่มีรายการที่ส่งสำเร็จ</p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-semibold">ไม่สำเร็จ</p>
+                              {result.notification_summary.failedEmails.length > 0 ? (
+                                <div className="mt-1 space-y-2">
+                                  {result.notification_summary.failedEmails.map((item) => (
+                                    <div key={item.email}>
+                                      <p className="break-all text-sm font-semibold">{item.email}</p>
+                                      <p className="text-sm">{item.message}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-1 text-sm">ไม่มีรายการที่ส่งไม่สำเร็จ</p>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
               <Button variant="outline" className="w-full" onClick={() => copyText(result.portal_link, "คัดลอกพอร์ทัลเช็กอินแล้ว")}>
@@ -477,7 +591,11 @@ export default function NewShipPage() {
                   คัดลอกลิงก์ Google Calendar
                 </Button>
               ) : null}
-              <Button variant="outline" className="w-full" onClick={() => copyText(result.invite_preview, "คัดลอกข้อความแจ้งเตือนแล้ว")}>
+              <Button
+                variant={hasNotificationFailures ? "default" : "outline"}
+                className="w-full"
+                onClick={() => copyText(result.invite_preview, "คัดลอกข้อความแจ้งเตือนแล้ว")}
+              >
                 <Clipboard className="size-4" />
                 คัดลอกข้อความแจ้งเตือน
               </Button>

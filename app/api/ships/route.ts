@@ -236,6 +236,7 @@ export async function POST(request: Request) {
       checkinUrl: portalLink
     });
     const notificationSummary = await sendAssigneeNotifications({
+      shipId: ship.id,
       title: ship.title ?? ship.name,
       description: ship.description ?? "",
       remark: ship.remark,
@@ -245,11 +246,16 @@ export async function POST(request: Request) {
       checkInLink: portalLink,
       calendarLink
     }).catch(() => ({
-      status: "failed" as const,
       enabled: process.env.ENABLE_EMAIL_NOTIFICATIONS === "true",
-      attempted: validated.assignedEmails.length,
+      skipped: false,
+      total: validated.assignedEmails.length,
       sent: 0,
-      failed: validated.assignedEmails.length
+      failed: validated.assignedEmails.length,
+      sentEmails: [],
+      failedEmails: validated.assignedEmails.map((email) => ({
+        email,
+        message: "ส่งอีเมลไม่สำเร็จ กรุณาตรวจสอบการตั้งค่าอีเมลหรือส่งข้อความแจ้งเตือนด้วยตนเอง"
+      }))
     }));
 
     return NextResponse.json({

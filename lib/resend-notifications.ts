@@ -3,6 +3,7 @@ import "server-only";
 import { createInviteEmailText } from "@/lib/email";
 
 type SendAssigneeNotificationsParams = {
+  shipId?: string;
   title: string;
   description: string;
   remark?: string | null;
@@ -14,14 +15,50 @@ type SendAssigneeNotificationsParams = {
 };
 
 type NotificationSummary = {
-  status: "sent" | "skipped" | "failed";
   enabled: boolean;
-  attempted: number;
+  skipped: boolean;
+  reason?: "feature_disabled" | "missing_api_key" | "missing_from_email" | "no_assignees";
+  total: number;
   sent: number;
   failed: number;
+  sentEmails: string[];
+  failedEmails: {
+    email: string;
+    message: string;
+  }[];
 };
 
 const RESEND_SEND_TIMEOUT_MS = 10_000;
+const UI_SAFE_SEND_FAILURE_MESSAGE = "ส่งอีเมลไม่สำเร็จ กรุณาตรวจสอบการตั้งค่าอีเมลหรือส่งข้อความแจ้งเตือนด้วยตนเอง";
+
+type SendResult =
+  | {
+      ok: true;
+      email: string;
+    }
+  | {
+      ok: false;
+      email: string;
+      providerStatus?: number;
+      providerMessage?: string;
+    };
+
+function createSkippedSummary(params: {
+  enabled: boolean;
+  reason: NonNullable<NotificationSummary["reason"]>;
+  total: number;
+}): NotificationSummary {
+  return {
+    enabled: params.enabled,
+    skipped: true,
+    reason: params.reason,
+    total: params.total,
+    sent: 0,
+    failed: 0,
+    sentEmails: [],
+    failedEmails: []
+  };
+}
 
 function escapeHtml(value: string) {
   return value
@@ -59,16 +96,22 @@ function buildNotificationHtml(params: SendAssigneeNotificationsParams) {
 export async function sendAssigneeNotifications(params: SendAssigneeNotificationsParams): Promise<NotificationSummary> {
   const enabled = process.env.ENABLE_EMAIL_NOTIFICATIONS === "true";
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL || "DockPass <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM_EMAIL;
 
-  if (!enabled || !apiKey) {
-    return {
-      status: "skipped",
-      enabled,
-      attempted: 0,
-      sent: 0,
-      failed: 0
-    };
+  if (params.assigneeEmails.length === 0) {
+    return createSkippedSummary({ enabled, reason: "no_assignees", total: 0 });
+  }
+
+  if (!enabled) {
+    return createSkippedSummary({ enabled, reason: "feature_disabled", total: params.assigneeEmails.length });
+  }
+
+  if (!apiKey) {
+    return createSkippedSummary({ enabled, reason: "missing_api_key", total: params.assigneeEmails.length });
+  }
+
+  if (!from) {
+    return createSkippedSummary({ enabled, reason: "missing_from_email", total: params.assigneeEmails.length });
   }
 
   const html = buildNotificationHtml(params);
@@ -80,9 +123,10 @@ export async function sendAssigneeNotifications(params: SendAssigneeNotification
     calendarLink: params.calendarLink
   });
 
-  const results = await Promise.allSettled(
-    params.assigneeEmails.map((email) =>
-      fetch("https://api.resend.com/emails", {
+  const results = await Promise.all(
+    params.assigneeEmails.map(async (email): Promise<SendResult> => {
+      try {
+        const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         signal: AbortSignal.timeout(RESEND_SEND_TIMEOUT_MS),
         headers: {
@@ -96,30 +140,57 @@ export async function sendAssigneeNotifications(params: SendAssigneeNotification
           text,
           html
         })
-      }).then((response) => {
-        if (!response.ok) {
-          throw new Error("RESEND_SEND_FAILED");
+        });
+
+        if (response.ok) {
+          return { ok: true, email };
         }
-      })
-    )
+
+        return {
+          ok: false,
+          email,
+          providerStatus: response.status,
+          providerMessage: await response.text().catch(() => "Unable to read Resend response")
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          email,
+          providerMessage: error instanceof Error ? error.message : "Unknown Resend send error"
+        };
+      }
+    })
   );
 
-  const sent = results.filter((result) => result.status === "fulfilled").length;
+  const sentEmails = results.filter((result): result is Extract<SendResult, { ok: true }> => result.ok).map((result) => result.email);
+  const failedResults = results.filter((result): result is Extract<SendResult, { ok: false }> => !result.ok);
+  const sent = sentEmails.length;
   const failed = results.length - sent;
 
   if (failed > 0) {
     console.warn("DockPass email notification partial failure", {
+      shipId: params.shipId,
       total: results.length,
       sent,
-      failed
+      failed,
+      failedEmails: failedResults.map((result) => ({
+        email: result.email,
+        providerStatus: result.providerStatus,
+        providerMessage: result.providerMessage
+      }))
     });
   }
 
   return {
-    status: failed === 0 ? "sent" : sent > 0 ? "sent" : "failed",
     enabled,
-    attempted: results.length,
+    skipped: false,
+    total: results.length,
     sent,
-    failed
+    failed,
+    sentEmails,
+    failedEmails: failedResults.map((result) => ({
+      email: result.email,
+      message: UI_SAFE_SEND_FAILURE_MESSAGE
+    }))
   };
 }
