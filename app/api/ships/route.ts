@@ -3,8 +3,10 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { generateShipCode, hashShipCode } from "@/lib/ship-code";
 import { isValidDateTime, validateCreateShipPayload } from "@/lib/validation";
-import { normalizeEmail } from "@/lib/email";
+import { createInvitePreview, normalizeEmail } from "@/lib/email";
 import { getTrashCutoff } from "@/lib/user-ship-state";
+import { createGoogleCalendarLink, getAppUrl } from "@/lib/calendar-link";
+import { sendAssigneeNotifications } from "@/lib/resend-notifications";
 
 type ShipRow = {
   id: string;
@@ -223,11 +225,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "บันทึกรายชื่อผู้ได้รับมอบหมายไม่สำเร็จ" }, { status: 500 });
     }
 
-    const appUrl = new URL(request.url).origin;
+    const appUrl = getAppUrl(request.url);
+    const portalLink = `${appUrl}/check-in`;
+    const calendarLink = createGoogleCalendarLink({
+      title: ship.title ?? ship.name,
+      description: ship.description ?? "",
+      remark: ship.remark,
+      startAt: ship.start_at,
+      endAt: ship.end_at,
+      checkinUrl: portalLink
+    });
+    const notificationSummary = await sendAssigneeNotifications({
+      title: ship.title ?? ship.name,
+      description: ship.description ?? "",
+      remark: ship.remark,
+      startAt: ship.start_at,
+      endAt: ship.end_at,
+      assigneeEmails: validated.assignedEmails,
+      checkInLink: portalLink,
+      calendarLink
+    }).catch(() => ({
+      status: "failed" as const,
+      enabled: process.env.ENABLE_EMAIL_NOTIFICATIONS === "true",
+      attempted: validated.assignedEmails.length,
+      sent: 0,
+      failed: validated.assignedEmails.length
+    }));
 
     return NextResponse.json({
       ship,
-      portal_link: `${appUrl}/check-in`,
+      portal_link: portalLink,
+      calendar_link: calendarLink,
+      invite_preview: createInvitePreview({
+        title: ship.title ?? ship.name,
+        description: ship.description ?? "",
+        remark: ship.remark,
+        checkInLink: portalLink,
+        calendarLink
+      }),
+      notification_summary: notificationSummary,
       assigned_emails: validated.assignedEmails
     });
   } catch {

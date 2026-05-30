@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarClock, Check, CheckCircle2, Clipboard, Copy, Search, Ship, Users } from "lucide-react";
+import { ArrowLeft, CalendarClock, CalendarPlus, Check, CheckCircle2, Clipboard, Copy, Search, Ship, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimeDisplayInput } from "@/components/ui/date-display-input";
@@ -30,6 +30,15 @@ type CreateResponse = {
     end_at: string;
   };
   portal_link: string;
+  calendar_link: string | null;
+  invite_preview: string;
+  notification_summary?: {
+    status: "sent" | "skipped" | "failed";
+    enabled: boolean;
+    attempted: number;
+    sent: number;
+    failed: number;
+  };
   assigned_emails: string[];
 };
 
@@ -451,10 +460,26 @@ export default function NewShipPage() {
                 <p className="mt-2 text-sm text-muted-foreground tabular-nums">
                   เวลา: {formatThaiDateRangeDisplay(result.ship.start_at, result.ship.end_at)}
                 </p>
+                {result.notification_summary ? (
+                  <p className="mt-2 text-sm text-muted-foreground tabular-nums">
+                    อีเมลแจ้งเตือน: ส่งแล้ว {result.notification_summary.sent}/{result.assigned_emails.length}
+                    {result.notification_summary.status === "skipped" ? " (ยังไม่ได้เปิดการส่งอีเมล)" : ""}
+                  </p>
+                ) : null}
               </div>
               <Button variant="outline" className="w-full" onClick={() => copyText(result.portal_link, "คัดลอกพอร์ทัลเช็กอินแล้ว")}>
                 <Copy className="size-4" />
                 คัดลอกพอร์ทัลเช็กอิน
+              </Button>
+              {result.calendar_link ? (
+                <Button variant="outline" className="w-full" onClick={() => copyText(result.calendar_link ?? "", "คัดลอกลิงก์ Google Calendar แล้ว")}>
+                  <CalendarPlus className="size-4" />
+                  คัดลอกลิงก์ Google Calendar
+                </Button>
+              ) : null}
+              <Button variant="outline" className="w-full" onClick={() => copyText(result.invite_preview, "คัดลอกข้อความแจ้งเตือนแล้ว")}>
+                <Clipboard className="size-4" />
+                คัดลอกข้อความแจ้งเตือน
               </Button>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="outline" onClick={() => setResult(null)}>
