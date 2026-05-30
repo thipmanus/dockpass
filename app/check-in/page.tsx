@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   ExternalLink,
   History,
@@ -22,6 +23,7 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { getBrowserUserOrNull, safeBrowserSignOut } from "@/lib/auth/client-session";
+import { createGoogleCalendarLink } from "@/lib/calendar-link";
 import { getStatusBadgeVariant, type CheckinStatus } from "@/lib/checkin-status";
 import {
   formatThaiDateDisplay,
@@ -121,9 +123,14 @@ export default function CheckInPage() {
   const [selectedShipId, setSelectedShipId] = useState("");
   const [detailShip, setDetailShip] = useState<PortalShip | null>(null);
   const [confirmShip, setConfirmShip] = useState<PortalShip | null>(null);
+  const [calendarShip, setCalendarShip] = useState<PortalShip | null>(null);
+  const [calendarSuccessOpen, setCalendarSuccessOpen] = useState(false);
+  const [lastCalendarUrl, setLastCalendarUrl] = useState<string | null>(null);
+  const [isOpeningCalendar, setIsOpeningCalendar] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CheckinResult | null>(null);
+  const calendarOpeningRef = useRef(false);
 
   const todayShips = useMemo(() => ships.filter((ship) => ship.is_today), [ships]);
   const checkinShips = useMemo(
@@ -141,6 +148,59 @@ export default function CheckInPage() {
     [ships]
   );
   const selectedShip = checkinShips.find((ship) => ship.id === selectedShipId) ?? null;
+
+  function getCalendarUrl(ship: PortalShip) {
+    if (!ship.start_at || !ship.end_at) {
+      return null;
+    }
+
+    return createGoogleCalendarLink({
+      title: ship.title,
+      description: ship.description,
+      remark: ship.remark,
+      startAt: ship.start_at,
+      endAt: ship.end_at,
+      checkinUrl: `${window.location.origin}/check-in`
+    });
+  }
+
+  function canShowCalendarAction(ship: PortalShip) {
+    return !ship.is_history && Boolean(getCalendarUrl(ship));
+  }
+
+  function openCalendarConfirm(ship: PortalShip) {
+    setError(null);
+    setCalendarShip(ship);
+  }
+
+  function confirmOpenCalendar() {
+    if (!calendarShip || calendarOpeningRef.current) {
+      return;
+    }
+
+    const calendarUrl = getCalendarUrl(calendarShip);
+    if (!calendarUrl) {
+      setError("ไม่สามารถสร้างลิงก์ Google Calendar ได้");
+      return;
+    }
+
+    calendarOpeningRef.current = true;
+    setIsOpeningCalendar(true);
+    window.open(calendarUrl, "_blank", "noopener,noreferrer");
+    setLastCalendarUrl(calendarUrl);
+    setCalendarShip(null);
+    setCalendarSuccessOpen(true);
+    window.setTimeout(() => {
+      calendarOpeningRef.current = false;
+      setIsOpeningCalendar(false);
+    }, 0);
+  }
+
+  function reopenLastCalendarUrl() {
+    if (lastCalendarUrl) {
+      window.open(lastCalendarUrl, "_blank", "noopener,noreferrer");
+    }
+  }
 
   async function loadShips() {
     setLoadingShips(true);
@@ -374,21 +434,27 @@ export default function CheckInPage() {
               ) : (
                 <div className="grid gap-3">
                   {todayShips.map((ship) => (
-                    <button
+                    <div
                       key={ship.id}
-                      type="button"
-                      className="grid rounded-lg border bg-white p-4 text-left hover:bg-muted/50 md:grid-cols-[120px_1fr_auto] md:items-center"
-                      onClick={() => setDetailShip(ship)}
+                      className="grid gap-3 rounded-lg border bg-white p-4 md:grid-cols-[120px_1fr_auto] md:items-center"
                     >
                       <div className="text-sm font-semibold tabular-nums text-primary">
                         {formatThaiTimeDisplay(ship.start_at)} - {formatThaiTimeDisplay(ship.end_at)}
                       </div>
-                      <div className="min-w-0 py-3 md:py-0">
+                      <button type="button" className="min-w-0 text-left" onClick={() => setDetailShip(ship)}>
                         <h3 className="safe-break font-semibold">{ship.title}</h3>
                         <p className="line-clamp-2 text-sm text-muted-foreground">{ship.description}</p>
+                      </button>
+                      <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                        <Badge variant={getStatusBadgeVariant(ship.status)}>{ship.status_label}</Badge>
+                        {canShowCalendarAction(ship) ? (
+                          <Button type="button" variant="outline" size="sm" onClick={() => openCalendarConfirm(ship)}>
+                            <CalendarPlus className="size-4" />
+                            เพิ่มลง Google Calendar
+                          </Button>
+                        ) : null}
                       </div>
-                      <Badge variant={getStatusBadgeVariant(ship.status)}>{ship.status_label}</Badge>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -416,12 +482,13 @@ export default function CheckInPage() {
               ) : (
                 <div className="grid gap-3">
                   {checkinShips.map((ship) => (
-                    <label
+                    <div
                       key={ship.id}
                       className={`block rounded-lg border bg-white p-4 ${ship.can_check_in ? "cursor-pointer hover:bg-muted/50" : "opacity-70"}`}
                     >
                       <div className="flex items-start gap-3">
                         <input
+                          id={`checkin-ship-${ship.id}`}
                           className="mt-1 size-4"
                           type="radio"
                           name="ship"
@@ -431,18 +498,31 @@ export default function CheckInPage() {
                           onChange={() => setSelectedShipId(ship.id)}
                         />
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0">
-                              <h3 className="safe-break font-semibold">{ship.title}</h3>
-                              <p className="mt-1 text-sm text-muted-foreground">
-                                {formatThaiDateDisplay(ship.start_at)} เวลา {formatThaiTimeDisplay(ship.start_at)} - {formatThaiTimeDisplay(ship.end_at)}
-                              </p>
+                          <label
+                            htmlFor={`checkin-ship-${ship.id}`}
+                            className={ship.can_check_in ? "block cursor-pointer" : "block"}
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <h3 className="safe-break font-semibold">{ship.title}</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                  {formatThaiDateDisplay(ship.start_at)} เวลา {formatThaiTimeDisplay(ship.start_at)} - {formatThaiTimeDisplay(ship.end_at)}
+                                </p>
+                              </div>
+                              <Badge variant={ship.can_check_in ? "green" : "blue"}>
+                                {ship.can_check_in ? "พร้อมเช็กอิน" : ship.disabled_reason ?? "ยังไม่พร้อม"}
+                              </Badge>
                             </div>
-                            <Badge variant={ship.can_check_in ? "green" : "blue"}>
-                              {ship.can_check_in ? "พร้อมเช็กอิน" : ship.disabled_reason ?? "ยังไม่พร้อม"}
-                            </Badge>
+                            <p className="safe-break mt-2 text-sm text-muted-foreground">{ship.description}</p>
+                          </label>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {canShowCalendarAction(ship) ? (
+                              <Button type="button" variant="outline" size="sm" onClick={() => openCalendarConfirm(ship)}>
+                                <CalendarPlus className="size-4" />
+                                เพิ่มลง Google Calendar
+                              </Button>
+                            ) : null}
                           </div>
-                          <p className="safe-break mt-2 text-sm text-muted-foreground">{ship.description}</p>
                           {ship.expected_checkin_status === "OUT_OF_SHIP" ? (
                             <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">
                               เช็กอินได้ แต่จะถูกบันทึกเป็นนอกรอบ
@@ -450,7 +530,7 @@ export default function CheckInPage() {
                           ) : null}
                         </div>
                       </div>
-                    </label>
+                    </div>
                   ))}
                 </div>
               )}
@@ -547,8 +627,70 @@ export default function CheckInPage() {
                   </a>
                 </Button>
               ) : null}
+              {canShowCalendarAction(detailShip) ? (
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => openCalendarConfirm(detailShip)}>
+                  <CalendarPlus className="size-4" />
+                  เพิ่มลง Google Calendar
+                </Button>
+              ) : null}
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(calendarShip)} onOpenChange={(open) => !isOpeningCalendar && !open && setCalendarShip(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ยืนยันการเพิ่มลง Google Calendar</DialogTitle>
+            <DialogDescription>
+              ระบบจะเปิด Google Calendar ในแท็บใหม่พร้อมข้อมูลรอบเช็กอินนี้ กรุณากดบันทึกใน Google Calendar เพื่อเพิ่มกิจกรรมลงปฏิทินของคุณ
+            </DialogDescription>
+          </DialogHeader>
+          {calendarShip ? (
+            <div className="space-y-4">
+              <div className="rounded-md border p-4">
+                <h2 className="safe-break font-semibold">{calendarShip.title}</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {formatThaiDateDisplay(calendarShip.start_at)} เวลา {formatThaiTimeDisplay(calendarShip.start_at)} - {formatThaiTimeDisplay(calendarShip.end_at)}
+                </p>
+                <p className="safe-break mt-3 text-sm leading-6 text-muted-foreground">{calendarShip.description}</p>
+                {calendarShip.remark ? (
+                  <p className="safe-break mt-3 rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                    หมายเหตุ: {calendarShip.remark}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setCalendarShip(null)} disabled={isOpeningCalendar}>
+                  ยกเลิก
+                </Button>
+                <Button onClick={confirmOpenCalendar} disabled={isOpeningCalendar}>
+                  {isOpeningCalendar ? "กำลังเปิด..." : "ยืนยันและเปิด Google Calendar"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={calendarSuccessOpen} onOpenChange={setCalendarSuccessOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>เปิด Google Calendar แล้ว</DialogTitle>
+            <DialogDescription>
+              ระบบเปิด Google Calendar ในแท็บใหม่แล้ว หากต้องการเพิ่มกิจกรรมลงปฏิทิน กรุณากดบันทึกในหน้า Google Calendar
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {lastCalendarUrl ? (
+              <Button variant="outline" onClick={reopenLastCalendarUrl}>
+                เปิด Google Calendar อีกครั้ง
+              </Button>
+            ) : null}
+            <Button onClick={() => setCalendarSuccessOpen(false)}>
+              รับทราบ
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
